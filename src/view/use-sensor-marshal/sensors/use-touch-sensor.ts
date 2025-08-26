@@ -31,7 +31,7 @@ interface Pending {
   type: 'PENDING';
   point: Position;
   actions: PreDragActions;
-  longPressTimerId: TimeoutID;
+  longPressTimerId: TimeoutID | null;
 }
 
 interface Dragging {
@@ -43,9 +43,8 @@ interface Dragging {
 type Phase = Idle | Pending | Dragging;
 
 const idle: Idle = { type: 'IDLE' };
-// Decreased from 150 as a work around for an issue for forcepress on iOS
-// https://github.com/atlassian/react-beautiful-dnd/issues/1401
-export const timeForLongPress = 120;
+// Changed to 0 to enable immediate touch drag (no long press delay)
+export const timeForLongPress = 0;
 export const forcePressThreshold = 0.15;
 
 interface GetBindingArgs {
@@ -259,6 +258,7 @@ export default function useTouchSensor(api: SensorAPI) {
     () => ({
       eventName: 'touchstart',
       fn: function onTouchStart(event: TouchEvent) {
+        console.log('👆 Touch start detected on draggable element');
         // Event already used by something else
         if (event.defaultPrevented) {
           return;
@@ -329,7 +329,7 @@ export default function useTouchSensor(api: SensorAPI) {
     }
 
     // aborting any pending drag
-    if (current.type === 'PENDING') {
+    if (current.type === 'PENDING' && current.longPressTimerId) {
       clearTimeout(current.longPressTimerId);
     }
 
@@ -404,6 +404,24 @@ export default function useTouchSensor(api: SensorAPI) {
         'Expected to move from IDLE to PENDING drag',
       );
 
+      // Check for immediate drag
+      if (timeForLongPress === 0) {
+        console.log('🚀 IMMEDIATE TOUCH DRAG ACTIVATED!');
+        // Set PENDING state first
+        setPhase({
+          type: 'PENDING',
+          point,
+          actions,
+          longPressTimerId: null
+        });
+        bindCapturingEvents();
+        // Defer startDragging to next tick to ensure state is set
+        setTimeout(() => {
+          startDragging();
+        }, 0);
+        return;
+      }
+      
       const longPressTimerId: TimeoutID = setTimeout(
         startDragging,
         timeForLongPress,
@@ -431,7 +449,7 @@ export default function useTouchSensor(api: SensorAPI) {
 
         // need to kill any pending drag start timer
         const phase: Phase = getPhase();
-        if (phase.type === 'PENDING') {
+        if (phase.type === 'PENDING' && phase.longPressTimerId) {
           clearTimeout(phase.longPressTimerId);
           setPhase(idle);
         }
