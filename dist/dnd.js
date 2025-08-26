@@ -6821,7 +6821,6 @@ ${latestSubscriptionCallbackError.current.stack}
   const idle = {
     type: 'IDLE'
   };
-  const timeForLongPress = 120;
   const forcePressThreshold = 0.15;
   function getWindowBindings({
     cancel,
@@ -6999,7 +6998,7 @@ ${latestSubscriptionCallbackError.current.stack}
       if (current.type === 'IDLE') {
         return;
       }
-      if (current.type === 'PENDING') {
+      if (current.type === 'PENDING' && current.longPressTimerId) {
         clearTimeout(current.longPressTimerId);
       }
       setPhase(idle);
@@ -7053,21 +7052,26 @@ ${latestSubscriptionCallbackError.current.stack}
         console.warn('[dnd] Expected to move from IDLE to PENDING drag. Ignoring.');
         return;
       }
-      const longPressTimerId = setTimeout(startDragging, timeForLongPress);
-      setPhase({
-        type: 'PENDING',
-        point,
-        actions,
-        longPressTimerId
-      });
-      bindCapturingEvents();
+      {
+        setPhase({
+          type: 'PENDING',
+          point,
+          actions,
+          longPressTimerId: null
+        });
+        bindCapturingEvents();
+        setTimeout(() => {
+          startDragging();
+        }, 0);
+        return;
+      }
     }, [bindCapturingEvents, getPhase, setPhase, startDragging]);
     useIsomorphicLayoutEffect(function mount() {
       listenForCapture();
       return function unmount() {
         unbindEventsRef.current();
         const phase = getPhase();
-        if (phase.type === 'PENDING') {
+        if (phase.type === 'PENDING' && phase.longPressTimerId) {
           clearTimeout(phase.longPressTimerId);
           setPhase(idle);
         }
