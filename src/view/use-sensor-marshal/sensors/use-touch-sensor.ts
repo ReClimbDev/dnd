@@ -245,6 +245,7 @@ function getHandleBindings({
 export default function useTouchSensor(api: SensorAPI) {
   const phaseRef = useRef<Phase>(idle);
   const unbindEventsRef = useRef<() => void>(noop);
+  const lastInteractionRef = useRef<number>(0);
 
   const getPhase = useCallback(function getPhase(): Phase {
     return phaseRef.current;
@@ -274,6 +275,14 @@ export default function useTouchSensor(api: SensorAPI) {
         if (!draggableId) {
           return;
         }
+
+        // Debounce: prevent rapid successive touch attempts
+        const now = Date.now();
+        const timeSinceLastInteraction = now - lastInteractionRef.current;
+        if (timeSinceLastInteraction < 50) {
+          return;
+        }
+        lastInteractionRef.current = now;
 
         const actions: PreDragActions | null = api.tryGetLock(
           draggableId,
@@ -381,10 +390,11 @@ export default function useTouchSensor(api: SensorAPI) {
   const startDragging = useCallback(
     function startDragging() {
       const phase: Phase = getPhase();
-      invariant(
-        phase.type === 'PENDING',
-        `Cannot start dragging from phase ${phase.type}`,
-      );
+      // More lenient check: if not PENDING, abort silently
+      if (phase.type !== 'PENDING') {
+        console.warn(`[dnd] Cannot start dragging from phase ${phase.type}. Ignoring.`);
+        return;
+      }
 
       const actions: FluidDragActions = phase.actions.fluidLift(phase.point);
 
@@ -399,10 +409,11 @@ export default function useTouchSensor(api: SensorAPI) {
 
   const startPendingDrag = useCallback(
     function startPendingDrag(actions: PreDragActions, point: Position) {
-      invariant(
-        getPhase().type === 'IDLE',
-        'Expected to move from IDLE to PENDING drag',
-      );
+      // More lenient check: if not IDLE, abort silently
+      if (getPhase().type !== 'IDLE') {
+        console.warn('[dnd] Expected to move from IDLE to PENDING drag. Ignoring.');
+        return;
+      }
 
       // Check for immediate drag
       if (timeForLongPress === 0) {

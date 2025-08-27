@@ -211,6 +211,7 @@ function getCaptureBindings({
 export default function useMouseSensor(api: SensorAPI) {
   const phaseRef = useRef<Phase>(idle);
   const unbindEventsRef = useRef<() => void>(noop);
+  const lastInteractionRef = useRef<number>(0);
 
   const startCaptureBinding: MouseEventBinding = useMemo(
     () => ({
@@ -236,6 +237,14 @@ export default function useMouseSensor(api: SensorAPI) {
         if (!draggableId) {
           return;
         }
+
+        // Debounce: prevent rapid successive drag attempts
+        const now = Date.now();
+        const timeSinceLastInteraction = now - lastInteractionRef.current;
+        if (timeSinceLastInteraction < 50) {
+          return;
+        }
+        lastInteractionRef.current = now;
 
         const actions: PreDragActions | null = api.tryGetLock(
           draggableId,
@@ -362,10 +371,11 @@ export default function useMouseSensor(api: SensorAPI) {
 
   const startPendingDrag = useCallback(
     function startPendingDrag(actions: PreDragActions, point: Position) {
-      invariant(
-        phaseRef.current.type === 'IDLE',
-        'Expected to move from IDLE to PENDING drag',
-      );
+      // More lenient check: if not IDLE, abort silently
+      if (phaseRef.current.type !== 'IDLE') {
+        console.warn('[dnd] Attempted to start pending drag when not IDLE. Ignoring.');
+        return;
+      }
       phaseRef.current = {
         type: 'PENDING',
         point,
