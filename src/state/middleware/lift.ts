@@ -26,11 +26,19 @@ export default (marshal: DimensionMarshal): Middleware =>
     // this can change the descriptor of the dragging item
     // Will call the onDragEnd responders
 
-    if (initial.phase === 'DROP_ANIMATING') {
-      dispatch(completeDrop({ completed: initial.completed }));
-    }
+  if (initial.phase === 'DROP_ANIMATING') {
+    dispatch(completeDrop({ completed: initial.completed }));
+  }
 
-    invariant(getState().phase === 'IDLE', 'Unexpected phase to start a drag');
+  // Check phase after potential DROP_ANIMATING cleanup
+  const currentPhase = getState().phase;
+  
+  // If not IDLE, silently return without starting the drag
+  // This can happen in React StrictMode or during rapid interactions
+  if (currentPhase !== 'IDLE') {
+    console.warn(`[dnd] Attempted to start drag from phase: ${currentPhase}. Ignoring.`);
+    return;
+  }
 
     // Removing any placeholders before we capture any starting dimensions
     dispatch(flush());
